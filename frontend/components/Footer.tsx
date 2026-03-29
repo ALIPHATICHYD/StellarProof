@@ -1,10 +1,5 @@
 "use client";
 
-// import { useTheme } from "@/app/context/ThemeContext";
-import { useTheme } from "../app/context/ThemeContext";
-
-
-// import { ThemeProvider } from './context/ThemeContext';
 import { Github, Twitter, Send, DiscIcon } from "lucide-react";
 
 function LogoIcon() {
@@ -41,10 +36,7 @@ function LogoIcon() {
 }
 
 export default function Footer() {
-  const { theme } = useTheme();
-
   // Define theme‑dependent classes
-  const isDark = theme === "dark" || true; // Always use dark theme
   const bgGradient = "from-darkblue-dark via-darkblue to-darkblue-dark";
   const textPrimary = "text-white";
   const textSecondary = "text-gray-300";

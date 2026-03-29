@@ -93,7 +93,7 @@ function generateParticles(count = 40): Particle[] {
 }
 
 function Confetti() {
-  const particles = useRef(generateParticles()).current;
+  const [particles] = useState(generateParticles);
 
   return (
     <div
