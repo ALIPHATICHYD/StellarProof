@@ -5,6 +5,7 @@
 import { Router, type Request, type Response } from "express";
 import spvRoutes from "./spv.routes";
 import verificationRoutes from "./verification.routes";
+import manifestRoutes from "./manifest.routes";
 
 const router = Router();
 
@@ -29,5 +30,10 @@ router.use("/api/v1/spv/records", spvRoutes);
  * /api/v1/verification/jobs  →  Verification Job lifecycle state machine
  */
 router.use("/api/v1/verification/jobs", verificationRoutes);
+
+/**
+ * /api/v1/manifests  →  Paginated manifest history for an owner
+ */
+router.use("/api/v1/manifests", manifestRoutes);
 
 export default router;
