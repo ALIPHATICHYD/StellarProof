@@ -67,6 +67,7 @@ export default function ContactPage() {
     setValue,
     watch,
   } = useForm<ContactFormInputs>({
+    // @ts-expect-error – @hookform/resolvers v5 type mismatch with zod v4.3.x
     resolver: zodResolver(contactSchema),
     mode: "onBlur",
     defaultValues: {
