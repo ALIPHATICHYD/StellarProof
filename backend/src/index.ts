@@ -1,7 +1,9 @@
-import { createApp } from "./app";
-import { connectDatabase, disconnectDatabase } from "./config/database";
-import { env } from "./config/env";
-import { startVerificationTimeoutJob } from "./jobs/verificationTimeout.job";
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { connectDB } from './config/db';
+import healthRoutes from './routes/health.routes';
+import kmsRoutes from './routes/kms.routes';
 
 async function main(): Promise<void> {
   await connectDatabase();
@@ -23,11 +25,9 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
-    setTimeout(() => {
-      console.error("[Server] Forced shutdown after timeout");
-      process.exit(1);
-    }, 10_000).unref();
-  };
+// Routes
+app.use('/api/health', healthRoutes);
+app.use('/api/v1/kms', kmsRoutes);
 
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
