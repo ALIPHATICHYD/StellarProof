@@ -52,8 +52,12 @@ describe("ExportActions", () => {
       return originalCreateElement(tagName);
     });
 
-    const mockAppendChild = jest.spyOn(document.body, "appendChild").mockImplementation(() => null as any);
-    const mockRemoveChild = jest.spyOn(document.body, "removeChild").mockImplementation(() => null as any);
+    const mockAppendChild = jest
+      .spyOn(document.body, "appendChild")
+      .mockImplementation((node) => node);
+    const mockRemoveChild = jest
+      .spyOn(document.body, "removeChild")
+      .mockImplementation((node) => node);
 
     render(<ExportActions certificate={mockCertificate} />);
     

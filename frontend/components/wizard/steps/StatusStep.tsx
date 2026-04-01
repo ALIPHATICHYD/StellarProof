@@ -6,7 +6,6 @@ import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import { useVerificationStatus } from "@/hooks/useVerificationStatus";
 
 type LocalStatus = "Pending" | "Verified" | "Rejected" | "Timeout";
-
 interface StatusStepProps {
   requestId: string;
   onReset: () => void;
@@ -91,7 +90,6 @@ function Confetti({ seed }: { seed: number }) {
     </div>
   );
 }
-
 export default function StatusStep({ requestId, onReset }: StatusStepProps) {
   const { status, isLoading, lastChecked } = useVerificationStatus({
     requestId,
