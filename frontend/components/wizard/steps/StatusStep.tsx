@@ -4,6 +4,8 @@ import React, { useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import { useVerificationStatus } from "@/hooks/useVerificationStatus";
+import { useWizard } from "@/context/WizardContext";
+import { ExportActions, type CertificateData } from "@/components/certificate/ExportActions";
 
 type LocalStatus = "Pending" | "Verified" | "Rejected" | "Timeout";
 
@@ -93,6 +95,7 @@ function Confetti({ seed }: { seed: number }) {
 }
 
 export default function StatusStep({ requestId, onReset }: StatusStepProps) {
+  const { state } = useWizard();
   const { status, isLoading, lastChecked } = useVerificationStatus({
     requestId,
     intervalMs: 5000,
@@ -105,6 +108,23 @@ export default function StatusStep({ requestId, onReset }: StatusStepProps) {
   const isRejected = normalized === "Rejected";
   const isTimeout = normalized === "Timeout";
   const isPending = normalized === "Pending";
+
+  const finalHash = state.spvResult?.encryptedHash || state.contentHash || "N/A";
+  const manifestHash =
+    state.manifestHash || state.advancedManifestHash || "N/A";
+
+  const certificate: CertificateData = useMemo(
+    () => ({
+      owner: "N/A",
+      certificate_id: requestId,
+      manifest_hash: manifestHash,
+      content_hash: finalHash,
+      attestation_hash: requestId,
+      timestamp: new Date().toISOString(),
+      network: "stellar-testnet",
+    }),
+    [finalHash, manifestHash, requestId]
+  );
 
   const title = isVerified
     ? "Verification Successful"
@@ -148,7 +168,11 @@ export default function StatusStep({ requestId, onReset }: StatusStepProps) {
         <p className="text-lg text-gray-600 dark:text-gray-300 mb-8 max-w-md mx-auto">
           {subtitle}
         </p>
-
+        {isVerified && (
+          <div className="mb-8 max-w-md mx-auto">
+            <ExportActions certificate={certificate} isLoading={isLoading} />
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
             type="button"

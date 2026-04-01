@@ -64,5 +64,4 @@ export function ExportActions({ certificate, isLoading = false }: ExportActionsP
     </div>
   );
 }
-
 export default ExportActions;
