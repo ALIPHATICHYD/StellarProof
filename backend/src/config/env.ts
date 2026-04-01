@@ -28,6 +28,22 @@ export const env = {
   /** MongoDB connection string, e.g. mongodb://localhost:27017/stellarproof */
   MONGODB_URI: requireEnv("MONGODB_URI"),
 
+  /** Soroban/Stellar RPC endpoint, e.g. https://soroban-testnet.stellar.org */
+  STELLAR_RPC_URL: requireEnv("STELLAR_RPC_URL"),
+
+  /**
+   * Network passphrase used when building simulation transactions.
+   * Testnet: "Test SDF Network ; September 2015"
+   * Mainnet: "Public Global Stellar Network ; September 2015"
+   */
+  STELLAR_NETWORK_PASSPHRASE: requireEnv("STELLAR_NETWORK_PASSPHRASE"),
+
+  /**
+   * Name of the balance-query entry point on the NFT Soroban contract.
+   * Defaults to "balance" (SEP-41 standard). Override if the deployed
+   * contract uses a different function name (e.g. "balance_of").
+   */
+  STELLAR_NFT_BALANCE_FN: optionalEnv("STELLAR_NFT_BALANCE_FN", "balance"),
   /** Allowed CORS origin for the frontend. */
   CORS_ORIGIN: optionalEnv("CORS_ORIGIN", "http://localhost:3000"),
 

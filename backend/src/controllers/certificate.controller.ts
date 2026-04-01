@@ -1,39 +1,18 @@
-/**
- * Certificate Controller – thin HTTP adapter layer.
- *
- * Each method:
- *  1. Extracts validated data from the request (query params are already
- *     validated by route middleware before reaching here).
- *  2. Delegates to the certificate service layer.
- *  3. Wraps the result in the standard ApiResponse envelope.
- *  4. Forwards any errors to the global error handler via `next(err)`.
- *
- * No business logic lives here.
- */
 import type { Request, Response, NextFunction } from "express";
 import { StatusCodes } from "http-status-codes";
+import { AppError } from "../errors/AppError";
 import { certificateService } from "../services/certificate.service";
 import type { ListCertificatesQuery } from "../types/certificate.types";
 
 export class CertificateController {
-  /**
-   * GET /api/v1/certificates?creatorId=G...&limit=20&skip=0
-   * Returns a paginated list of certificates belonging to the given creator.
-   */
   async listCertificates(
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> {
     try {
-      const query: ListCertificatesQuery = {
-        creatorId: req.query.creatorId as string,
-        limit: Number(req.query.limit),
-        skip: Number(req.query.skip),
-      };
-
+      const query = req.query as unknown as ListCertificatesQuery;
       const result = await certificateService.listCertificates(query);
-
       res.status(StatusCodes.OK).json({
         success: true,
         data: result,
@@ -42,6 +21,45 @@ export class CertificateController {
       next(err);
     }
   }
+
+  async getCertificateById(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const id = req.params.id?.trim();
+      if (!id) {
+        throw new AppError(
+          "Certificate id is required",
+          StatusCodes.BAD_REQUEST,
+          "MISSING_CERTIFICATE_ID"
+        );
+      }
+
+      const certificate = await certificateService.getCertificateById(id);
+      if (!certificate) {
+        throw new AppError(
+          "Certificate not found",
+          StatusCodes.NOT_FOUND,
+          "CERTIFICATE_NOT_FOUND"
+        );
+      }
+
+      res.status(StatusCodes.OK).json({
+        success: true,
+        data: certificate,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 export const certificateController = new CertificateController();
+
+export const getCertificateById = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => certificateController.getCertificateById(req, res, next);
