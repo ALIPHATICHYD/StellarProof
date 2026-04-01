@@ -6,30 +6,36 @@ import healthRoutes from './routes/health.routes';
 import kmsRoutes from './routes/kms.routes';
 import spvRoutes from './routes/spv.routes';
 
-// Load environment variables
-dotenv.config();
+async function main(): Promise<void> {
+  await connectDatabase();
 
-const app = express();
-const PORT = process.env.PORT || 4000;
+  startVerificationTimeoutJob();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+  const app = createApp();
+  const server = app.listen(env.PORT, () => {
+    console.log(
+      `[Server] StellarProof backend listening on port ${env.PORT} (${env.NODE_ENV})`
+    );
+  });
 
-// Connect to MongoDB
-connectDB();
+  const shutdown = async (signal: string): Promise<void> => {
+    console.log(`[Server] ${signal} received — shutting down gracefully`);
+    server.close(async () => {
+      await disconnectDatabase();
+      console.log("[Server] HTTP server closed");
+      process.exit(0);
+    });
 
 // Routes
 app.use('/api/health', healthRoutes);
 app.use('/api/v1/kms', kmsRoutes);
 app.use('/api/v1/spv', spvRoutes);
 
-// Base route
-app.get('/', (req: Request, res: Response) => {
-  res.send('StellarProof Backend API is running');
-});
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+}
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+main().catch((err: unknown) => {
+  console.error("[Server] Fatal startup error:", err);
+  process.exit(1);
 });
