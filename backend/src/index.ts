@@ -1,15 +1,27 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { connectDB } from './config/db';
-import healthRoutes from './routes/health.routes';
-import kmsRoutes from './routes/kms.routes';
-import spvRoutes from './routes/spv.routes';
+import { createApp } from "./app";
+import { initCloudinary } from "./config/cloudinary";
+import { connectDatabase, disconnectDatabase } from "./config/database";
+import { env } from "./config/env";
+import { startCleanupJob } from "./jobs/cleanup.job";
+import { startVerificationTimeoutJob } from "./jobs/verificationTimeout.job";
+
+function hasCloudinaryConfig(): boolean {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+      process.env.CLOUDINARY_API_KEY &&
+      process.env.CLOUDINARY_API_SECRET
+  );
+}
 
 async function main(): Promise<void> {
   await connectDatabase();
 
   startVerificationTimeoutJob();
+
+  if (hasCloudinaryConfig()) {
+    initCloudinary();
+    startCleanupJob();
+  }
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
@@ -26,11 +38,11 @@ async function main(): Promise<void> {
       process.exit(0);
     });
 
-// Routes
-app.use('/api/health', healthRoutes);
-app.use('/api/v1/kms', kmsRoutes);
-app.use('/api/v1/spv', spvRoutes);
-
+    setTimeout(() => {
+      console.error("[Server] Forced shutdown after timeout");
+      process.exit(1);
+    }, 10_000).unref();
+  };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }
