@@ -6,6 +6,8 @@ import SPVRecord, { ISPVRecord } from '../models/SPVRecord.model';
 import KMSKey from '../models/KMSKey.model';
 import Asset, { IAsset } from '../models/Asset.model';
 
+// --- Config helpers ---
+
 function resolveCloudinaryConfig(): void {
   const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
   if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
@@ -28,11 +30,35 @@ function resolveMasterKey(): Buffer {
   return Buffer.from(hex, 'hex');
 }
 
+function resolvePinataJWT(): string {
+  const jwt = process.env.PINATA_JWT;
+  if (!jwt) {
+    throw new Error('PINATA_JWT environment variable is not configured');
+  }
+  return jwt;
+}
+
+// --- Interfaces ---
+
+export type SupportedStorageProvider = 'cloudinary' | 'ipfs';
+
+interface PinataUploadResponse {
+  IpfsHash: string;
+  PinSize: number;
+  Timestamp: string;
+}
+
+interface StorageUploadResult {
+  storageReferenceId: string; // Cloudinary public_id OR IPFS CID
+  storageUrl: string;         // Cloudinary HTTPS URL OR Pinata gateway URL
+}
+
 export interface UploadEncryptedAssetParams {
   fileBuffer: Buffer;
   fileName: string;
   mimeType: string;
   creatorId: mongoose.Types.ObjectId;
+  storageProvider: SupportedStorageProvider;
   accessType: ISPVRecord['accessType'];
   allowedUsers?: mongoose.Types.ObjectId[];
   nftContractAddress?: string;
@@ -41,9 +67,11 @@ export interface UploadEncryptedAssetParams {
 export interface UploadEncryptedAssetResult {
   spvRecord: ISPVRecord;
   asset: IAsset;
-  cloudinaryUrl: string;
-  cloudinaryPublicId: string;
+  storageUrl: string;
+  storageReferenceId: string;
 }
+
+// --- Service ---
 
 class SPVService {
   async uploadEncryptedAsset(params: UploadEncryptedAssetParams): Promise<UploadEncryptedAssetResult> {
@@ -57,7 +85,7 @@ class SPVService {
     const authTag = cipher.getAuthTag(); // 128-bit integrity tag
 
     // Upload layout: [16-byte authTag | 12-byte IV | ciphertext]
-    // The IV is embedded so the decryptor is self-contained
+    // The IV is embedded so the decryptor is fully self-contained
     const uploadBuffer = Buffer.concat([authTag, assetIv, ciphertext]);
 
     // 3. Wrap the symmetric key with the server master key before DB storage
@@ -69,14 +97,13 @@ class SPVService {
     // Stored value layout: base64([16-byte authTag | wrappedKey])
     const encryptedKeyValue = Buffer.concat([keyAuthTag, wrappedKey]).toString('base64');
 
-    // 4. Upload the encrypted payload to Cloudinary with resource_type: 'raw'
-    //    This bypasses Cloudinary's image/video processing pipeline and stores
-    //    the raw byte stream without transformation or validation.
-    resolveCloudinaryConfig();
-    const publicId = `stellarproof/spv/${params.creatorId}/${crypto.randomUUID()}`;
-    const cloudinaryResult = await this.streamToCloudinary(uploadBuffer, publicId);
+    // 4. Dispatch to the requested storage backend
+    const storageResult =
+      params.storageProvider === 'ipfs'
+        ? await this.pinToIPFS(uploadBuffer, params.fileName)
+        : await this.uploadToCloudinary(uploadBuffer, params.creatorId.toString());
 
-    // 5. Persist to MongoDB — roll back the Cloudinary asset on any DB failure
+    // 5. Persist to MongoDB — roll back the remote asset on any DB failure
     try {
       const kmsKey = await KMSKey.create({
         creatorId: params.creatorId,
@@ -92,8 +119,8 @@ class SPVService {
         fileName: params.fileName,
         mimeType: params.mimeType,
         sizeBytes: params.fileBuffer.length,
-        storageProvider: 'cloudinary',
-        storageReferenceId: cloudinaryResult.public_id,
+        storageProvider: params.storageProvider,
+        storageReferenceId: storageResult.storageReferenceId,
         isEncrypted: true,
         encryptionKeyVersion: kmsKey.keyVersion,
         accessPolicy: params.accessType,
@@ -112,14 +139,15 @@ class SPVService {
       return {
         spvRecord,
         asset,
-        cloudinaryUrl: cloudinaryResult.secure_url,
-        cloudinaryPublicId: cloudinaryResult.public_id,
+        storageUrl: storageResult.storageUrl,
+        storageReferenceId: storageResult.storageReferenceId,
       };
     } catch (dbError) {
-      // Prevent orphaned Cloudinary resources when DB operations fail
-      await cloudinary.uploader
-        .destroy(cloudinaryResult.public_id, { resource_type: 'raw' })
-        .catch(() => undefined);
+      // Roll back orphaned remote resources so storage stays consistent with the DB
+      await this.rollbackRemoteStorage(
+        params.storageProvider,
+        storageResult.storageReferenceId,
+      ).catch(() => undefined);
       throw dbError;
     }
   }
@@ -147,6 +175,80 @@ class SPVService {
     }
 
     return record;
+  }
+
+  /**
+   * Pins the encrypted buffer to IPFS via Pinata.
+   *
+   * The buffer is wrapped in a Blob typed as application/octet-stream before
+   * being added to FormData. This ensures Pinata treats it as raw binary and
+   * stores the exact byte sequence without any text encoding or transformation,
+   * which prevents data corruption when the ciphertext is retrieved for
+   * decryption.
+   */
+  private async pinToIPFS(buffer: Buffer, fileName: string): Promise<StorageUploadResult> {
+    const jwt = resolvePinataJWT();
+
+    const sanitizedName = fileName.replace(/[^\w.\-]/g, '_');
+
+    // Wrap the encrypted bytes in an octet-stream Blob so Pinata stores raw
+    // binary without applying any text encoding to the payload
+    const blob = new Blob([buffer], { type: 'application/octet-stream' });
+    const formData = new FormData();
+    formData.append('file', blob, sanitizedName);
+    formData.append(
+      'pinataMetadata',
+      JSON.stringify({ name: `spv-${sanitizedName}-${Date.now()}` }),
+    );
+    formData.append(
+      'pinataOptions',
+      JSON.stringify({ cidVersion: 1 }), // CIDv1 — base32-encoded, future-proof
+    );
+
+    const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${jwt}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`IPFS pinning failed (HTTP ${response.status}): ${errorText}`);
+    }
+
+    const data = (await response.json()) as PinataUploadResponse;
+    const cid = data.IpfsHash;
+
+    return {
+      storageReferenceId: cid,
+      storageUrl: `https://gateway.pinata.cloud/ipfs/${cid}`,
+    };
+  }
+
+  private async uploadToCloudinary(buffer: Buffer, creatorId: string): Promise<StorageUploadResult> {
+    resolveCloudinaryConfig();
+    const publicId = `stellarproof/spv/${creatorId}/${crypto.randomUUID()}`;
+    const result = await this.streamToCloudinary(buffer, publicId);
+    return {
+      storageReferenceId: result.public_id,
+      storageUrl: result.secure_url,
+    };
+  }
+
+  private async rollbackRemoteStorage(
+    provider: SupportedStorageProvider,
+    referenceId: string,
+  ): Promise<void> {
+    if (provider === 'ipfs') {
+      const jwt = process.env.PINATA_JWT;
+      if (!jwt) return;
+      await fetch(`https://api.pinata.cloud/pinning/unpin/${referenceId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+    } else {
+      await cloudinary.uploader.destroy(referenceId, { resource_type: 'raw' });
+    }
   }
 
   private streamToCloudinary(buffer: Buffer, publicId: string): Promise<UploadApiResponse> {

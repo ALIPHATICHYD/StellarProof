@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { spvService } from '../services/spv.service';
+import { spvService, SupportedStorageProvider } from '../services/spv.service';
 import { ISPVRecord } from '../models/SPVRecord.model';
 
 const VALID_ACCESS_TYPES: ISPVRecord['accessType'][] = [
@@ -9,6 +9,8 @@ const VALID_ACCESS_TYPES: ISPVRecord['accessType'][] = [
   'nft_holders_only',
   'specific_users',
 ];
+
+const VALID_STORAGE_PROVIDERS: SupportedStorageProvider[] = ['cloudinary', 'ipfs'];
 
 export const uploadEncryptedAsset = async (req: Request, res: Response): Promise<void> => {
   if (!req.file) {
@@ -19,9 +21,10 @@ export const uploadEncryptedAsset = async (req: Request, res: Response): Promise
     return;
   }
 
-  const { accessType, nftContractAddress } = req.body as {
+  const { accessType, nftContractAddress, storageProvider } = req.body as {
     accessType?: ISPVRecord['accessType'];
     nftContractAddress?: string;
+    storageProvider?: SupportedStorageProvider;
   };
 
   if (!accessType || !VALID_ACCESS_TYPES.includes(accessType)) {
@@ -31,6 +34,11 @@ export const uploadEncryptedAsset = async (req: Request, res: Response): Promise
     });
     return;
   }
+
+  const resolvedProvider: SupportedStorageProvider =
+    storageProvider && VALID_STORAGE_PROVIDERS.includes(storageProvider)
+      ? storageProvider
+      : 'cloudinary';
 
   // allowedUsers may arrive as a single string or repeated form fields
   const rawAllowedUsers: string | string[] | undefined = req.body.allowedUsers;
@@ -50,6 +58,7 @@ export const uploadEncryptedAsset = async (req: Request, res: Response): Promise
       fileName: req.file.originalname,
       mimeType: req.file.mimetype,
       creatorId: new mongoose.Types.ObjectId(req.user!.id),
+      storageProvider: resolvedProvider,
       accessType,
       allowedUsers: parsedAllowedUsers,
       nftContractAddress,
@@ -61,8 +70,9 @@ export const uploadEncryptedAsset = async (req: Request, res: Response): Promise
       data: {
         spvId: result.spvRecord._id,
         assetId: result.asset._id,
-        cloudinaryUrl: result.cloudinaryUrl,
-        cloudinaryPublicId: result.cloudinaryPublicId,
+        storageProvider: resolvedProvider,
+        storageUrl: result.storageUrl,
+        storageReferenceId: result.storageReferenceId,
         accessType: result.spvRecord.accessType,
         isSealed: result.spvRecord.isSealed,
         createdAt: result.spvRecord.createdAt,
