@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db';
 import healthRoutes from './routes/health.routes';
+import { validateNoDuplicateKeys } from './middlewares/validation.middleware';
 
 // Load environment variables
 dotenv.config();
@@ -12,7 +13,8 @@ const PORT = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Intercepts raw JSON body stream to reject payloads with duplicate keys
+app.use(validateNoDuplicateKeys);
 
 // Connect to MongoDB
 connectDB();
