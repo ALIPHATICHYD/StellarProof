@@ -52,6 +52,35 @@ export class AuthService {
       },
     };
   }
+
+  /**
+   * ✅ NEW METHOD (fixes your CI error)
+   */
+  async verifyTokenAndGetUser(token: string) {
+    if (!token) {
+      throw new AppError('No token provided', 401, 'NO_TOKEN');
+    }
+
+    let decoded: any;
+
+    try {
+      decoded = jwt.verify(token, env.JWT_SECRET) as { userId: string };
+    } catch (err) {
+      throw new AppError('Invalid or expired token', 401, 'INVALID_TOKEN');
+    }
+
+    const user = await User.findById(decoded.userId).exec();
+
+    if (!user) {
+      throw new AppError('User not found', 401, 'USER_NOT_FOUND');
+    }
+
+    if (!user.isActive) {
+      throw new AppError('Account is deactivated', 403, 'ACCOUNT_DEACTIVATED');
+    }
+
+    return user;
+  }
 }
 
 export const authService = new AuthService();
