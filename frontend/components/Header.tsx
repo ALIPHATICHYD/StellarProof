@@ -26,6 +26,12 @@ const NAV_LINKS = [
     ],
   },
   { href: "#pricing", label: "Pricing" },
+  {
+    label: "Demo",
+    children: [
+      { href: "/dashboard", label: "Verification Dashboard" },
+    ],
+  },
 ] as const;
 
 function scrollToSection(hash: string) {
@@ -110,11 +116,12 @@ export default function Header() {
         {/* Logo */}
         <a
           href="#home"
+          aria-label="StellarProof — go to home"
           onClick={(e) => { e.preventDefault(); scrollToSection("#home"); }}
           className="flex shrink-0 items-center gap-2.5 outline-none transition focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-darkblue"
         >
           <LogoIcon />
-          <span className="text-xl font-semibold tracking-tight">
+          <span className="text-xl font-semibold tracking-tight" aria-hidden="true">
             <span className="text-primary">Stellar</span>
             <span className="text-secondary">Proof</span>
           </span>
@@ -177,15 +184,17 @@ export default function Header() {
                         className="absolute left-0 top-full pt-1"
                       >
                         <li className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-darkblue/95 shadow-lg backdrop-blur-md">
-                          <ul className="min-w-[160px] py-1">
+                          <ul className="min-w-40 py-1">
                             {item.children.map((child) => (
                               <li key={child.href} role="none">
                                 <a
                                   href={child.href}
                                   role="menuitem"
                                   onClick={(e) => {
-                                    e.preventDefault();
-                                    scrollToSection(child.href);
+                                    if (child.href.startsWith("#")) {
+                                      e.preventDefault();
+                                      scrollToSection(child.href);
+                                    }
                                     setOpenDropdown(null);
                                   }}
                                   className="block px-4 py-2 text-sm text-gray-700 dark:text-white/90 transition-colors duration-300 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white focus-visible:bg-gray-100 dark:focus-visible:bg-white/10 focus-visible:outline-none"
@@ -281,7 +290,14 @@ export default function Header() {
                               <li key={child.href}>
                                 <a
                                   href={child.href}
-                                  onClick={(e) => { e.preventDefault(); handleNavClick(child.href); }}
+                                  onClick={(e) => {
+                                    if (child.href.startsWith("#")) {
+                                      e.preventDefault();
+                                      handleNavClick(child.href);
+                                    } else {
+                                      setMobileOpen(false);
+                                    }
+                                  }}
                                   className="block rounded-lg py-2.5 pl-2 text-sm text-gray-600 dark:text-white/80 hover:text-gray-900 dark:hover:text-white transition-colors duration-300"
                                 >
                                   {child.label}

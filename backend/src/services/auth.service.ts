@@ -1,31 +1,56 @@
 import jwt from 'jsonwebtoken';
-import User, { IUser } from '../models/User.model';
+import User from '../models/User.model';
+import { AppError } from '../errors/AppError';
+import { env } from '../config/env';
 
-interface JwtPayload {
-  id: string;
-  iat: number;
-  exp: number;
+export interface LoginResult {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    stellarPublicKey?: string;
+  };
 }
 
-class AuthService {
-  async verifyTokenAndGetUser(token: string): Promise<IUser> {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new Error('JWT_SECRET environment variable is not configured');
+export class AuthService {
+  async login(email: string, password: string): Promise<LoginResult> {
+    if (!email || !password) {
+      throw new AppError('Email and password are required', 400, 'MISSING_CREDENTIALS');
     }
 
-    const decoded = jwt.verify(token, secret) as JwtPayload;
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+      .select('+passwordHash')
+      .exec();
 
-    const user = await User.findById(decoded.id);
     if (!user) {
-      throw new Error('USER_NOT_FOUND');
+      throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
     }
 
     if (!user.isActive) {
-      throw new Error('ACCOUNT_DEACTIVATED');
+      throw new AppError('Account is deactivated', 403, 'ACCOUNT_DEACTIVATED');
     }
 
-    return user;
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
+    }
+
+    const token = jwt.sign(
+      { userId: user._id.toString() },
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRES_IN } as jwt.SignOptions
+    );
+
+    return {
+      token,
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        role: user.role,
+        ...(user.stellarPublicKey ? { stellarPublicKey: user.stellarPublicKey } : {}),
+      },
+    };
   }
 }
 

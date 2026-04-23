@@ -67,6 +67,7 @@ export default function ContactPage() {
     setValue,
     watch,
   } = useForm<ContactFormInputs>({
+    // @ts-expect-error – @hookform/resolvers v5 type mismatch with zod v4.3.x
     resolver: zodResolver(contactSchema),
     mode: "onBlur",
     defaultValues: {
@@ -80,6 +81,7 @@ export default function ContactPage() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const messageValue = watch("message") || "";
   const messageLength = messageValue.length;
 
