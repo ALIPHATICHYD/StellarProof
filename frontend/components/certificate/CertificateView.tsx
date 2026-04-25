@@ -108,7 +108,7 @@ export function CertificateView({ certificateId }: CertificateViewProps) {
       if (result.error) {
         setError(result.error);
       } else {
-        setCertificate(result.data);
+        setCertificate(result.data ?? null);
       }
       setLoading(false);
     };
